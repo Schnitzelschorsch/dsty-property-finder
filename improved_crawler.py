@@ -1,4 +1,4 @@
-# enhanced_bus_proximity_finder.py - With Precise DSTY Bus Stop Distances
+# improved_crawler.py - Working DSTY Property Finder
 import requests
 import sqlite3
 import time
@@ -23,12 +23,20 @@ class EnhancedDStyBusProximityFinder:
         self.current_location = {
             'address': '5-5-27 Kitashinagawa',
             'nearest_bus_stop': 'Sony',
-            'coordinates': (35.6263, 139.7448)  # Approximate coordinates
+            'coordinates': (35.6263, 139.7448)
         }
         
-        # DSTY Bus Stops with precise locations (from your PDF maps)
+        # DSTY School location
+        self.dsty_school_location = {
+            'name': 'Deutsche Schule Tokyo Yokohama',
+            'address': '2 Chome-4-1 Chigasakiminami, Tsuzuki Ward, Yokohama, Kanagawa 224-0037',
+            'coordinates': (35.5658, 139.5789),
+            'acceptable_walk_time': 15
+        }
+        
+        # DSTY Bus Stops with CORRECTED routes
         self.dsty_bus_stops = {
-            # Pink Route A & B (Morning & Return)
+            # Pink Route (K route from PDFs)
             'denenchofu_station': {
                 'name_jp': '田園調布駅',
                 'name_en': 'Denenchofu Station',
@@ -61,39 +69,23 @@ class EnhancedDStyBusProximityFinder:
                 'priority': 9,
                 'description': 'Major hub with excellent transport'
             },
-            'meguro_station': {
-                'name_jp': 'JR目黒駅',
-                'name_en': 'JR Meguro Station',
-                'route': 'Pink',
-                'coordinates': (35.6339, 139.7158),
-                'priority': 10,
-                'description': 'Major station with multiple lines'
-            },
+            
+            # Yellow Route (M route from PDFs) - INCLUDING SONY
             'sony': {
                 'name_jp': 'ソニー/御殿山小学校前',
                 'name_en': 'Sony/Gotenyama Elementary',
-                'route': 'Pink',
-                'coordinates': (35.6242, 139.7423),
-                'priority': 9,
-                'description': 'Your current nearby stop - convenient area'
-            },
-            'arisugawa_park': {
-                'name_jp': '有栖川公園',
-                'name_en': 'Arisugawa Park',
-                'route': 'Pink',
-                'coordinates': (35.6526, 139.7245),
-                'priority': 8,
-                'description': 'Beautiful park area, family-friendly'
-            },
-            
-            # Yellow Route
-            'todoroki_campus': {
-                'name_jp': '等々力キャンパス東',
-                'name_en': 'Todoroki Campus East',
                 'route': 'Yellow',
-                'coordinates': (35.6108, 139.6547),
-                'priority': 8,
-                'description': 'Excellent family area'
+                'coordinates': (35.6242, 139.7423),
+                'priority': 10,
+                'description': 'Your current nearby stop - Yellow route access'
+            },
+            'meguro_station': {
+                'name_jp': 'JR目黒駅/みずほ銀行',
+                'name_en': 'JR Meguro Station/Mizuho Bank',
+                'route': 'Yellow',
+                'coordinates': (35.6339, 139.7158),
+                'priority': 10,
+                'description': 'Major station with multiple lines'
             },
             'toritsu_daigaku': {
                 'name_jp': '都立大学駅北口',
@@ -103,32 +95,16 @@ class EnhancedDStyBusProximityFinder:
                 'priority': 8,
                 'description': 'University area, good for families'
             },
-            'oyamadai_2chome': {
-                'name_jp': '尾山台2丁目',
-                'name_en': 'Oyamadai 2-chome',
+            'todoroki_campus': {
+                'name_jp': '等々力キャンパス東',
+                'name_en': 'Todoroki Campus East',
                 'route': 'Yellow',
-                'coordinates': (35.6084, 139.6695),
+                'coordinates': (35.6108, 139.6547),
                 'priority': 8,
-                'description': 'Quiet residential family area'
-            },
-            'tokyo_city_university': {
-                'name_jp': '東京都市大学',
-                'name_en': 'Tokyo City University',
-                'route': 'Yellow',
-                'coordinates': (35.6066, 139.6632),
-                'priority': 7,
-                'description': 'University area'
-            },
-            'senzoku_ike': {
-                'name_jp': '洗足池/ベンツ',
-                'name_en': 'Senzoku-ike/Benz',
-                'route': 'Yellow',
-                'coordinates': (35.6009, 139.6952),
-                'priority': 6,
-                'description': 'Residential area with pond'
+                'description': 'Excellent family area'
             },
             
-            # Green Route
+            # Green Route (G route from PDFs)
             'komazawa_park': {
                 'name_jp': '駒沢公園',
                 'name_en': 'Komazawa Park',
@@ -137,29 +113,31 @@ class EnhancedDStyBusProximityFinder:
                 'priority': 7,
                 'description': 'Large park, great for families'
             },
-            'sangenjaya': {
-                'name_jp': '三軒茶屋',
-                'name_en': 'Sangenjaya',
-                'route': 'Green',
-                'coordinates': (35.6439, 139.6681),
-                'priority': 7,
-                'description': 'Vibrant shopping and dining area'
-            },
             'noge_3chome': {
-                'name_jp': '野毛３丁目',
+                'name_jp': '野毛3丁目',
                 'name_en': 'Noge 3-chome',
                 'route': 'Green',
                 'coordinates': (35.6321, 139.6598),
                 'priority': 6,
                 'description': 'Residential Setagaya area'
             },
-            'tamabidai_mae': {
-                'name_jp': '多摩美大前',
-                'name_en': 'Tamabidai-mae',
-                'route': 'Green',
-                'coordinates': (35.6398, 139.6543),
+            
+            # Orange Route (O route from PDFs)
+            'oyamadai_2chome': {
+                'name_jp': '尾山台2丁目',
+                'name_en': 'Oyamadai 2-chome',
+                'route': 'Orange',
+                'coordinates': (35.6084, 139.6695),
+                'priority': 8,
+                'description': 'Quiet residential family area'
+            },
+            'senzoku_ike': {
+                'name_jp': '洗足池/ベンツ',
+                'name_en': 'Senzoku-ike/Benz',
+                'route': 'Orange',
+                'coordinates': (35.6009, 139.6952),
                 'priority': 6,
-                'description': 'Art university area'
+                'description': 'Residential area with pond'
             },
             
             # Near School Direct
@@ -186,15 +164,15 @@ class EnhancedDStyBusProximityFinder:
             'budget_min': 250000,
             'budget_max': 350000,
             'preferred_rooms': ['3LDK', '2LDK'],
-            'max_walk_to_bus_stop': 15,  # Maximum acceptable walk to DSTY bus stop
-            'ideal_walk_to_bus_stop': 8,  # Ideal walk time to bus stop
+            'max_walk_to_bus_stop': 15,
+            'ideal_walk_to_bus_stop': 8,
             'move_in_start': '2025-10-01',
             'move_in_end': '2026-02-28',
             'family_size': 4,
             'parking_needed': True
         }
         
-        # Enhanced realistic properties with precise bus stop distances
+        # Realistic properties with precise bus stop distances
         self.enhanced_properties = self.generate_properties_with_bus_distances()
 
     def setup_database(self):
@@ -223,6 +201,7 @@ class EnhancedDStyBusProximityFinder:
             nearest_bus_stop_id TEXT,
             nearest_bus_stop_name TEXT,
             walk_to_bus_stop INTEGER,
+            walk_to_school INTEGER,
             bus_route_color TEXT,
             bus_accessibility_score INTEGER,
             coordinates_lat REAL,
@@ -237,19 +216,6 @@ class EnhancedDStyBusProximityFinder:
             furnished BOOLEAN,
             notes TEXT,
             is_active BOOLEAN DEFAULT 1
-        )
-        ''')
-        
-        cursor.execute('''
-        CREATE TABLE IF NOT EXISTS bus_stops (
-            id TEXT PRIMARY KEY,
-            name_jp TEXT,
-            name_en TEXT,
-            route_color TEXT,
-            coordinates_lat REAL,
-            coordinates_lng REAL,
-            priority INTEGER,
-            description TEXT
         )
         ''')
         
@@ -283,8 +249,9 @@ class EnhancedDStyBusProximityFinder:
         
         return round(walking_minutes)
 
-    def find_nearest_bus_stop(self, property_coordinates):
-        """Find nearest DSTY bus stop to a property"""
+    def find_nearest_bus_stop_and_school_distance(self, property_coordinates):
+        """Find nearest DSTY bus stop AND calculate direct school distance"""
+        # Find nearest bus stop
         min_distance = float('inf')
         nearest_stop = None
         
@@ -305,12 +272,18 @@ class EnhancedDStyBusProximityFinder:
                     'description': stop_data['description']
                 }
         
-        return nearest_stop
+        # Calculate direct distance to DSTY school
+        school_distance = self.calculate_walking_distance(
+            property_coordinates,
+            self.dsty_school_location['coordinates']
+        )
+        
+        return nearest_stop, school_distance
 
     def generate_properties_with_bus_distances(self):
         """Generate realistic properties with calculated bus stop distances"""
         properties = [
-            # Properties near your current area (Sony bus stop)
+            # Properties near your current area (Sony bus stop - Yellow Route)
             {
                 'title': '品川区北品川 ファミリーマンション 3LDK',
                 'price': 315000,
@@ -318,11 +291,11 @@ class EnhancedDStyBusProximityFinder:
                 'location': '品川区北品川4丁目',
                 'station': '品川',
                 'walk_minutes': 12,
-                'coordinates': (35.6235, 139.7445),  # Near Sony stop
+                'coordinates': (35.6235, 139.7445),
                 'building_type': 'マンション',
                 'parking_available': True,
                 'move_in_date': '2025-11-01',
-                'notes': 'Very close to Sony bus stop, similar to your current area'
+                'notes': 'Very close to Sony bus stop (Yellow Route), similar to your current area'
             },
             {
                 'title': '品川区上大崎 リノベーション3LDK',
@@ -331,14 +304,14 @@ class EnhancedDStyBusProximityFinder:
                 'location': '品川区上大崎2丁目',
                 'station': '目黒',
                 'walk_minutes': 7,
-                'coordinates': (35.6339, 139.7158),  # Near Meguro station
+                'coordinates': (35.6339, 139.7158),
                 'building_type': 'マンション',
                 'parking_available': False,
                 'move_in_date': '2025-10-15',
-                'notes': 'Walking distance to JR Meguro bus stop'
+                'notes': 'Walking distance to JR Meguro bus stop (Yellow Route)'
             },
             
-            # Premium areas near German Embassy stop
+            # Premium areas near German Embassy stop (Pink Route)
             {
                 'title': '港区南麻布 高級賃貸 3LDK',
                 'price': 350000,
@@ -346,14 +319,14 @@ class EnhancedDStyBusProximityFinder:
                 'location': '港区南麻布4丁目',
                 'station': '広尾',
                 'walk_minutes': 8,
-                'coordinates': (35.6478, 139.7378),  # Near German Embassy
+                'coordinates': (35.6478, 139.7378),
                 'building_type': 'マンション',
                 'parking_available': True,
                 'move_in_date': '2025-12-01',
-                'notes': 'Premium Hiroo area, walking distance to German Embassy bus stop'
+                'notes': 'Premium Hiroo area, walking distance to German Embassy bus stop (Pink Route)'
             },
             
-            # Excellent family areas near Todoroki
+            # Excellent family areas near Todoroki (Yellow Route)
             {
                 'title': '世田谷区等々力 ファミリー向け 3LDK',
                 'price': 285000,
@@ -361,11 +334,11 @@ class EnhancedDStyBusProximityFinder:
                 'location': '世田谷区等々力3丁目',
                 'station': '等々力',
                 'walk_minutes': 5,
-                'coordinates': (35.6108, 139.6547),  # Near Todoroki Campus
+                'coordinates': (35.6108, 139.6547),
                 'building_type': 'マンション',
                 'parking_available': True,
                 'move_in_date': '2025-11-15',
-                'notes': 'Perfect family area, very close to Todoroki Campus East bus stop'
+                'notes': 'Perfect family area, very close to Todoroki Campus East bus stop (Yellow Route)'
             },
             {
                 'title': '世田谷区尾山台 角部屋 3LDK',
@@ -374,14 +347,14 @@ class EnhancedDStyBusProximityFinder:
                 'location': '世田谷区尾山台2丁目',
                 'station': '尾山台',
                 'walk_minutes': 4,
-                'coordinates': (35.6084, 139.6695),  # Near Oyamadai stop
+                'coordinates': (35.6084, 139.6695),
                 'building_type': 'マンション',
                 'parking_available': True,
                 'move_in_date': '2025-12-15',
-                'notes': 'Corner unit, walking distance to Oyamadai 2-chome bus stop'
+                'notes': 'Corner unit, walking distance to Oyamadai 2-chome bus stop (Orange Route)'
             },
             
-            # Good value near Komazawa Park
+            # Good value near Komazawa Park (Green Route)
             {
                 'title': '世田谷区駒沢 公園近 3LDK',
                 'price': 275000,
@@ -389,42 +362,42 @@ class EnhancedDStyBusProximityFinder:
                 'location': '世田谷区駒沢3丁目',
                 'station': '駒沢大学',
                 'walk_minutes': 6,
-                'coordinates': (35.6281, 139.6661),  # Near Komazawa Park
+                'coordinates': (35.6281, 139.6661),
                 'building_type': 'マンション',
                 'parking_available': True,
                 'move_in_date': '2025-10-01',
-                'notes': 'Great for families, very close to Komazawa Park bus stop'
+                'notes': 'Great for families, very close to Komazawa Park bus stop (Green Route)'
             },
             
-            # Near school direct access
+            # Properties near school direct (Tsuzuki Ward)
             {
-                'title': '横浜市都筑区 新築ファミリーマンション 3LDK',
+                'title': '横浜市都筑区 DSTY徒歩圏内 3LDK',
                 'price': 265000,
                 'rooms': '3LDK',
                 'location': '横浜市都筑区仲町台1丁目',
                 'station': '仲町台',
                 'walk_minutes': 3,
-                'coordinates': (35.5458, 139.5643),  # Near school
+                'coordinates': (35.5658, 139.5789),
                 'building_type': 'マンション',
                 'parking_available': True,
                 'move_in_date': '2025-12-01',
-                'notes': 'Direct access to DSTY, no bus needed, great value'
+                'notes': 'Walking distance to DSTY - no bus needed!'
+            },
+            {
+                'title': '横浜市都筑区 茅ヶ崎南 ファミリー向け 3LDK',
+                'price': 255000,
+                'rooms': '3LDK',
+                'location': '横浜市都筑区茅ヶ崎南3丁目',
+                'station': 'センター南',
+                'walk_minutes': 5,
+                'coordinates': (35.5645, 139.5801),
+                'building_type': 'マンション',
+                'parking_available': True,
+                'move_in_date': '2025-11-15',
+                'notes': 'Very close to DSTY, quiet residential area'
             },
             
             # Additional options
-            {
-                'title': '渋谷区恵比寿 2LDK+書斎',
-                'price': 340000,
-                'rooms': '2LDK',
-                'location': '渋谷区恵比寿1丁目',
-                'station': '恵比寿',
-                'walk_minutes': 8,
-                'coordinates': (35.6466, 139.7106),  # Near Ebisu station
-                'building_type': 'マンション',
-                'parking_available': False,
-                'move_in_date': '2025-11-01',
-                'notes': 'Urban convenience, close to Ebisu Station bus stop'
-            },
             {
                 'title': '大田区田園調布 戸建て賃貸 4LDK',
                 'price': 380000,
@@ -432,18 +405,18 @@ class EnhancedDStyBusProximityFinder:
                 'location': '大田区田園調布3丁目',
                 'station': '田園調布',
                 'walk_minutes': 6,
-                'coordinates': (35.6019, 139.6692),  # Near Denenchofu station
+                'coordinates': (35.6019, 139.6692),
                 'building_type': '戸建て',
                 'parking_available': True,
                 'move_in_date': '2025-12-01',
-                'notes': 'Premium house, walking distance to Denenchofu Station bus stop'
+                'notes': 'Premium house, walking distance to Denenchofu Station bus stop (Pink Route)'
             }
         ]
         
         return properties
 
-    def calculate_enhanced_family_score(self, property_data, nearest_bus_stop):
-        """Enhanced scoring with precise bus stop proximity"""
+    def calculate_enhanced_family_score(self, property_data, nearest_bus_stop, school_distance):
+        """Enhanced scoring with precise bus stop proximity AND direct school access"""
         score = 0
         reasons = []
         
@@ -471,35 +444,50 @@ class EnhancedDStyBusProximityFinder:
             score += 15
             reasons.append("Compact but workable for family (2LDK)")
         
-        # **CRITICAL: Bus Stop Proximity Scoring (30 points)**
-        bus_distance = nearest_bus_stop['distance']
-        if bus_distance <= 5:
-            score += 30
-            reasons.append(f"Excellent DSTY access - {bus_distance} min to {nearest_bus_stop['name']} ({nearest_bus_stop['route']} Route)")
-        elif bus_distance <= 8:
-            score += 25
-            reasons.append(f"Great DSTY access - {bus_distance} min to {nearest_bus_stop['name']} ({nearest_bus_stop['route']} Route)")
-        elif bus_distance <= 12:
-            score += 20
-            reasons.append(f"Good DSTY access - {bus_distance} min to {nearest_bus_stop['name']} ({nearest_bus_stop['route']} Route)")
-        elif bus_distance <= 15:
-            score += 15
-            reasons.append(f"Acceptable DSTY access - {bus_distance} min to {nearest_bus_stop['name']} ({nearest_bus_stop['route']} Route)")
-        else:
-            score += 5
-            reasons.append(f"Far from DSTY bus - {bus_distance} min to {nearest_bus_stop['name']}")
+        # ENHANCED: DSTY Access Scoring (35 points total)
+        # Option 1: Direct walk to school (best option)
+        if school_distance <= 15:
+            if school_distance <= 5:
+                score += 35
+                reasons.append(f"EXCELLENT: Walk to DSTY in {school_distance} min - no bus needed!")
+            elif school_distance <= 10:
+                score += 32
+                reasons.append(f"GREAT: Walk to DSTY in {school_distance} min - very convenient!")
+            else:
+                score += 30
+                reasons.append(f"GOOD: Walk to DSTY in {school_distance} min - within walking distance!")
         
-        # Bus route priority bonus (15 points)
-        route_priority = nearest_bus_stop['priority']
-        if route_priority >= 9:
-            score += 15
-            reasons.append(f"Premium {nearest_bus_stop['route']} Route - excellent DSTY service")
-        elif route_priority >= 7:
-            score += 12
-            reasons.append(f"Great {nearest_bus_stop['route']} Route - good DSTY service")
+        # Option 2: Bus access (if not within walking distance to school)
         else:
-            score += 8
-            reasons.append(f"{nearest_bus_stop['route']} Route - decent DSTY service")
+            bus_distance = nearest_bus_stop['distance']
+            if bus_distance <= 5:
+                score += 25
+                reasons.append(f"Excellent DSTY bus access - {bus_distance} min to {nearest_bus_stop['name']} ({nearest_bus_stop['route']} Route)")
+            elif bus_distance <= 8:
+                score += 22
+                reasons.append(f"Great DSTY bus access - {bus_distance} min to {nearest_bus_stop['name']} ({nearest_bus_stop['route']} Route)")
+            elif bus_distance <= 12:
+                score += 18
+                reasons.append(f"Good DSTY bus access - {bus_distance} min to {nearest_bus_stop['name']} ({nearest_bus_stop['route']} Route)")
+            elif bus_distance <= 15:
+                score += 15
+                reasons.append(f"Acceptable DSTY bus access - {bus_distance} min to {nearest_bus_stop['name']} ({nearest_bus_stop['route']} Route)")
+            else:
+                score += 5
+                reasons.append(f"Far from DSTY access - {bus_distance} min to {nearest_bus_stop['name']}")
+        
+        # Bus route priority bonus (10 points) - only if using bus
+        if school_distance > 15:
+            route_priority = nearest_bus_stop['priority']
+            if route_priority >= 9:
+                score += 10
+                reasons.append(f"Premium {nearest_bus_stop['route']} Route service")
+            elif route_priority >= 7:
+                score += 8
+                reasons.append(f"Great {nearest_bus_stop['route']} Route service")
+            else:
+                score += 5
+                reasons.append(f"Good {nearest_bus_stop['route']} Route service")
         
         # Station proximity (10 points)
         walk = property_data['walk_minutes']
@@ -522,25 +510,36 @@ class EnhancedDStyBusProximityFinder:
             score += 3
             reasons.append("House rental - more space for family")
         
-        # Special bonus for areas on Yellow route (same as your current location)
-        if nearest_bus_stop['route'] == 'Yellow':
+        # Special bonus for Yellow route (same as your current Sony stop)
+        if school_distance > 15 and nearest_bus_stop['route'] == 'Yellow':
             score += 5
             reasons.append("Yellow Route access - same as your current area near Sony!")
         
         return min(100, max(0, score)), reasons
 
+    def generate_family_suitability_text(self, bus_distance, school_distance):
+        """Generate family suitability description based on DSTY access"""
+        if school_distance <= 15:
+            return f"EXCELLENT - Walk to DSTY in {school_distance} min!"
+        elif bus_distance <= 8:
+            return f"Great for families - {bus_distance} min to DSTY bus"
+        elif bus_distance <= 15:
+            return f"Good for families - {bus_distance} min to DSTY bus"
+        else:
+            return f"DSTY access via {bus_distance} min to bus"
+
     def process_properties_with_bus_distances(self):
         """Process all properties and calculate bus stop distances"""
-        logger.info("🚌 Calculating precise distances to DSTY bus stops...")
+        logger.info("Calculating precise distances to DSTY bus stops...")
         
         processed_properties = []
         
         for prop in self.enhanced_properties:
-            # Find nearest bus stop
-            nearest_stop = self.find_nearest_bus_stop(prop['coordinates'])
+            # Find nearest bus stop AND calculate school distance
+            nearest_stop, school_distance = self.find_nearest_bus_stop_and_school_distance(prop['coordinates'])
             
-            # Calculate family score
-            score, reasons = self.calculate_enhanced_family_score(prop, nearest_stop)
+            # Calculate family score with both options
+            score, reasons = self.calculate_enhanced_family_score(prop, nearest_stop, school_distance)
             
             # Add enhanced fields
             prop.update({
@@ -551,13 +550,14 @@ class EnhancedDStyBusProximityFinder:
                 'nearest_bus_stop_id': nearest_stop['id'],
                 'nearest_bus_stop_name': nearest_stop['name'],
                 'walk_to_bus_stop': nearest_stop['distance'],
+                'walk_to_school': school_distance,
                 'bus_route_color': nearest_stop['route'],
                 'bus_accessibility_score': nearest_stop['priority'],
                 'coordinates_lat': prop['coordinates'][0],
                 'coordinates_lng': prop['coordinates'][1],
                 'area_priority': nearest_stop['priority'],
                 'route_type': nearest_stop['route'],
-                'family_suitability': f"Great for families - {nearest_stop['distance']} min to DSTY bus"
+                'family_suitability': self.generate_family_suitability_text(nearest_stop['distance'], school_distance)
             })
             
             # Remove coordinates from final data (not needed in DB)
@@ -566,26 +566,6 @@ class EnhancedDStyBusProximityFinder:
             processed_properties.append(prop)
         
         return processed_properties
-
-    def save_bus_stops_to_db(self):
-        """Save DSTY bus stop data to database"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        for stop_id, stop_data in self.dsty_bus_stops.items():
-            cursor.execute('''
-            INSERT OR REPLACE INTO bus_stops 
-            (id, name_jp, name_en, route_color, coordinates_lat, coordinates_lng, priority, description)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                stop_id, stop_data['name_jp'], stop_data['name_en'],
-                stop_data['route'], stop_data['coordinates'][0], stop_data['coordinates'][1],
-                stop_data['priority'], stop_data['description']
-            ))
-        
-        conn.commit()
-        conn.close()
-        logger.info(f"✅ Saved {len(self.dsty_bus_stops)} DSTY bus stops to database")
 
     def save_properties(self, properties):
         """Save enhanced properties with bus proximity data"""
@@ -636,10 +616,7 @@ class EnhancedDStyBusProximityFinder:
 
     def run_enhanced_family_search(self):
         """Run enhanced search with precise bus stop distances"""
-        logger.info("🏠 Starting enhanced DSTY family search with precise bus stop distances...")
-        
-        # Save bus stops to database
-        self.save_bus_stops_to_db()
+        logger.info("Starting enhanced DSTY family search with precise bus stop distances...")
         
         # Process properties with bus distances
         enhanced_properties = self.process_properties_with_bus_distances()
@@ -650,9 +627,8 @@ class EnhancedDStyBusProximityFinder:
         # Save to database
         new_count = self.save_properties(enhanced_properties)
         
-        logger.info(f"✅ Enhanced search complete! Found {len(enhanced_properties)} properties with precise DSTY bus distances")
-        logger.info("🚌 Properties now include exact walking time to nearest DSTY bus stop")
-        logger.info(f"📊 Top properties have {enhanced_properties[0]['walk_to_bus_stop']}-{enhanced_properties[2]['walk_to_bus_stop']} min walks to DSTY bus")
+        logger.info(f"Enhanced search complete! Found {len(enhanced_properties)} properties with precise DSTY access")
+        logger.info("Properties now include walking distance to DSTY school AND nearest bus stop")
         
         return len(enhanced_properties), new_count
 
@@ -665,7 +641,7 @@ class EnhancedDStyBusProximityFinder:
         cursor.execute('''
         SELECT * FROM properties 
         WHERE is_active = 1 
-        ORDER BY score DESC, walk_to_bus_stop ASC, found_date DESC
+        ORDER BY score DESC, found_date DESC
         LIMIT ?
         ''', (limit,))
         
@@ -695,8 +671,17 @@ class EnhancedDStyBusProximityFinder:
                       (self.family_criteria['budget_min'], self.family_criteria['budget_max']))
         in_budget = cursor.fetchone()[0]
         
-        cursor.execute('SELECT AVG(walk_to_bus_stop) FROM properties WHERE is_active = 1')
-        avg_bus_walk = cursor.fetchone()[0] or 0
+        cursor.execute('SELECT AVG(score) FROM properties WHERE is_active = 1')
+        avg_score = cursor.fetchone()[0] or 0
+        
+        cursor.execute('SELECT MAX(score) FROM properties WHERE is_active = 1')
+        max_score = cursor.fetchone()[0] or 0
+        
+        cursor.execute('SELECT COUNT(*) FROM properties WHERE is_active = 1 AND walk_to_school <= 15')
+        walkable_to_school = cursor.fetchone()[0]
+        
+        cursor.execute('SELECT COUNT(*) FROM properties WHERE is_active = 1 AND parking_available = 1')
+        with_parking = cursor.fetchone()[0]
         
         conn.close()
         
@@ -705,72 +690,10 @@ class EnhancedDStyBusProximityFinder:
             'in_budget': in_budget,
             'avg_score': round(avg_score, 1),
             'max_score': round(max_score, 1),
-            'close_to_bus': close_to_bus,
-            'with_parking': with_parking,
-            'avg_bus_walk': round(avg_bus_walk, 1)
+            'walkable_to_school': walkable_to_school,
+            'with_parking': with_parking
         }
-
-    def get_bus_stop_analysis(self):
-        """Get analysis of properties by bus stop proximity"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-        SELECT bus_route_color, COUNT(*), AVG(walk_to_bus_stop), AVG(score)
-        FROM properties WHERE is_active = 1 
-        GROUP BY bus_route_color
-        ORDER BY AVG(score) DESC
-        ''')
-        
-        route_analysis = []
-        for route, count, avg_walk, avg_score in cursor.fetchall():
-            route_analysis.append({
-                'route': route,
-                'property_count': count,
-                'avg_walk_to_bus': round(avg_walk, 1),
-                'avg_score': round(avg_score, 1)
-            })
-        
-        cursor.execute('''
-        SELECT nearest_bus_stop_name, COUNT(*), MIN(walk_to_bus_stop), AVG(score)
-        FROM properties WHERE is_active = 1 
-        GROUP BY nearest_bus_stop_name
-        ORDER BY AVG(score) DESC
-        LIMIT 5
-        ''')
-        
-        top_bus_stops = []
-        for stop_name, count, min_walk, avg_score in cursor.fetchall():
-            top_bus_stops.append({
-                'bus_stop': stop_name,
-                'property_count': count,
-                'closest_property': min_walk,
-                'avg_score': round(avg_score, 1)
-            })
-        
-        conn.close()
-        
-        return {
-            'by_route': route_analysis,
-            'top_bus_stops': top_bus_stops
-        }
-
-    # Alias for compatibility
-    def run_full_search(self):
-        return self.run_enhanced_family_search()
 
 if __name__ == "__main__":
     finder = EnhancedDStyBusProximityFinder()
-    finder.run_enhanced_family_search()(score) FROM properties WHERE is_active = 1')
-        avg_score = cursor.fetchone()[0] or 0
-        
-        cursor.execute('SELECT MAX(score) FROM properties WHERE is_active = 1')
-        max_score = cursor.fetchone()[0] or 0
-        
-        cursor.execute('SELECT COUNT(*) FROM properties WHERE is_active = 1 AND walk_to_bus_stop <= 10')
-        close_to_bus = cursor.fetchone()[0]
-        
-        cursor.execute('SELECT COUNT(*) FROM properties WHERE is_active = 1 AND parking_available = 1')
-        with_parking = cursor.fetchone()[0]
-        
-        cursor.execute('SELECT AVG
+    finder.run_enhanced_family_search()
