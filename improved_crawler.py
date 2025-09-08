@@ -602,18 +602,19 @@ class EnhancedDStyBusProximityFinder:
                 INSERT OR IGNORE INTO properties 
                 (title, price, rooms, location, station, walk_minutes, property_url,
                  found_date, source, score, area_priority, route_type, reasons,
-                 nearest_bus_stop_id, nearest_bus_stop_name, walk_to_bus_stop,
+                 nearest_bus_stop_id, nearest_bus_stop_name, walk_to_bus_stop, walk_to_school,
                  bus_route_color, bus_accessibility_score, coordinates_lat, coordinates_lng,
                  family_suitability, move_in_date, building_type, parking_available,
                  pet_friendly, furnished, notes)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     prop['title'], prop['price'], prop['rooms'], prop['location'],
                     prop['station'], prop['walk_minutes'], 
                     prop.get('property_url', 'https://example.com/'),
                     prop['found_date'], prop['source'], prop['score'],
                     prop['area_priority'], prop['route_type'], prop['reasons'],
-                    prop['nearest_bus_stop_id'], prop['nearest_bus_stop_name'], prop['walk_to_bus_stop'],
+                    prop['nearest_bus_stop_id'], prop['nearest_bus_stop_name'], 
+                    prop['walk_to_bus_stop'], prop['walk_to_school'],
                     prop['bus_route_color'], prop['bus_accessibility_score'], 
                     prop['coordinates_lat'], prop['coordinates_lng'],
                     prop['family_suitability'], prop.get('move_in_date'),
