@@ -1,6 +1,6 @@
 # app.py - Web interface for Railway
 from flask import Flask, render_template_string, jsonify
-from improved_crawler import MultiSiteDStyPropertyCrawler as DStyPropertyCrawler
+from improved_crawler import PersonalDStyPropertyFinder as DStyPropertyCrawler
 import threading
 import time
 import schedule
