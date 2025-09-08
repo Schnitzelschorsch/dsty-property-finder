@@ -522,10 +522,10 @@ class EnhancedDStyBusProximityFinder:
             score += 3
             reasons.append("House rental - more space for family")
         
-        # Special bonus for areas similar to your current location
-        if nearest_bus_stop['id'] == 'sony':
+        # Special bonus for areas on Yellow route (same as your current location)
+        if nearest_bus_stop['route'] == 'Yellow':
             score += 5
-            reasons.append("Similar to your current area near Sony bus stop")
+            reasons.append("Yellow Route access - same as your current area near Sony!")
         
         return min(100, max(0, score)), reasons
 
