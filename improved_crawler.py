@@ -1,4 +1,4 @@
-# improved_crawler.py - Multi-site DSTY Property Crawler
+# simple_crawler.py - Working Suumo-only DSTY Crawler
 import requests
 import sqlite3
 import time
@@ -9,71 +9,41 @@ from datetime import datetime
 from bs4 import BeautifulSoup
 from urllib.parse import urlencode, quote
 import re
-from fake_useragent import UserAgent
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-class ImprovedDStyPropertyCrawler:
+class SimpleDStyPropertyCrawler:
     def __init__(self):
         self.db_path = "dsty_properties.db"
         self.setup_database()
         
-        # Initialize user agent rotation
-        try:
-            self.ua = UserAgent()
-        except:
-            # Fallback user agents if fake_useragent fails
-            self.user_agents = [
-                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15',
-                'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/119.0'
-            ]
-        
-        # DSTY target areas with multiple site support
-        self.target_areas = {
-            '田園調布': {
-                'priority': 10, 'route': 'Pink',
-                'suumo_code': '13111', 'homes_area': 'denenchofu',
-                'athome_code': 'tokyo_ota', 'lifull_area': 'denenchofu'
-            },
-            '目黒': {
-                'priority': 10, 'route': 'Pink',
-                'suumo_code': '13109', 'homes_area': 'meguro',
-                'athome_code': 'tokyo_meguro', 'lifull_area': 'meguro'
-            },
-            '恵比寿': {
-                'priority': 9, 'route': 'Pink',
-                'suumo_code': '13109', 'homes_area': 'ebisu',
-                'athome_code': 'tokyo_shibuya', 'lifull_area': 'ebisu'
-            },
-            '等々力': {
-                'priority': 8, 'route': 'Yellow',
-                'suumo_code': '13112', 'homes_area': 'todoroki',
-                'athome_code': 'tokyo_setagaya', 'lifull_area': 'todoroki'
-            },
-            '尾山台': {
-                'priority': 8, 'route': 'Yellow',
-                'suumo_code': '13112', 'homes_area': 'oyamadai',
-                'athome_code': 'tokyo_setagaya', 'lifull_area': 'oyamadai'
-            },
-            '三軒茶屋': {
-                'priority': 7, 'route': 'Green',
-                'suumo_code': '13112', 'homes_area': 'sangenjaya',
-                'athome_code': 'tokyo_setagaya', 'lifull_area': 'sangenjaya'
-            }
+        # Simplified DSTY target stations (just the main ones)
+        self.target_stations = {
+            '田園調布': {'priority': 10, 'route': 'Pink'},
+            '目黒': {'priority': 10, 'route': 'Pink'},
+            '恵比寿': {'priority': 9, 'route': 'Pink'},
+            '等々力': {'priority': 8, 'route': 'Yellow'},
+            '尾山台': {'priority': 8, 'route': 'Yellow'},
+            '三軒茶屋': {'priority': 7, 'route': 'Green'},
         }
         
-        self.min_rent = 250000
-        self.max_rent = 350000
+        # Broader search criteria for better results
+        self.min_rent = 200000  # Broader range
+        self.max_rent = 400000  # Broader range
         
-        # Create session with retry and better headers
+        # Simple session setup
         self.session = requests.Session()
-        self.setup_session()
+        self.session.headers.update({
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'ja,en-US;q=0.9,en;q=0.8',
+            'Accept-Encoding': 'gzip, deflate',
+            'Connection': 'keep-alive',
+        })
 
     def setup_database(self):
-        """Enhanced database setup"""
+        """Simple database setup"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
@@ -87,393 +57,191 @@ class ImprovedDStyPropertyCrawler:
             station TEXT,
             walk_minutes INTEGER,
             property_url TEXT UNIQUE,
-            image_url TEXT,
-            floor_plan_url TEXT,
             found_date TEXT,
             source TEXT,
             score REAL,
             area_priority INTEGER,
             route_type TEXT,
             reasons TEXT,
-            building_age INTEGER,
-            floor_area REAL,
-            is_active BOOLEAN DEFAULT 1,
-            last_seen TEXT
-        )
-        ''')
-        
-        cursor.execute('''
-        CREATE TABLE IF NOT EXISTS search_results (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            search_date TEXT,
-            source TEXT,
-            area TEXT,
-            properties_found INTEGER,
-            new_properties INTEGER,
-            status TEXT,
-            error_message TEXT
+            is_active BOOLEAN DEFAULT 1
         )
         ''')
         
         conn.commit()
         conn.close()
-        logger.info("Enhanced database initialized")
+        logger.info("Simple database initialized")
 
-    def setup_session(self):
-        """Setup session with anti-detection measures"""
-        self.session.headers.update({
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
-            'Accept-Language': 'ja,en-US;q=0.9,en;q=0.8',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Connection': 'keep-alive',
-            'Upgrade-Insecure-Requests': '1',
-            'Sec-Fetch-Dest': 'document',
-            'Sec-Fetch-Mode': 'navigate',
-            'Sec-Fetch-Site': 'none',
-            'Cache-Control': 'max-age=0'
-        })
-        
-        # Configure retries
-        from requests.adapters import HTTPAdapter
-        from urllib3.util.retry import Retry
-        
-        retry_strategy = Retry(
-            total=3,
-            backoff_factor=1,
-            status_forcelist=[429, 500, 502, 503, 504],
-        )
-        
-        adapter = HTTPAdapter(max_retries=retry_strategy)
-        self.session.mount("http://", adapter)
-        self.session.mount("https://", adapter)
-
-    def get_random_headers(self):
-        """Get randomized headers to avoid detection"""
-        try:
-            user_agent = self.ua.random
-        except:
-            user_agent = random.choice(self.user_agents)
-        
-        return {
-            'User-Agent': user_agent,
-            'Referer': 'https://www.google.com/',
-            'X-Forwarded-For': f"{random.randint(1,255)}.{random.randint(1,255)}.{random.randint(1,255)}.{random.randint(1,255)}"
-        }
-
-    def random_delay(self, min_seconds=2, max_seconds=5):
-        """Add random delay to mimic human behavior"""
-        delay = random.uniform(min_seconds, max_seconds)
-        time.sleep(delay)
-
-    def search_suumo_improved(self, area_name, area_data):
-        """Improved Suumo search with anti-detection"""
+    def search_suumo_station(self, station_name, station_data):
+        """Search Suumo by station name with broader parameters"""
         properties = []
         
         try:
-            # Update headers for this request
-            headers = self.get_random_headers()
-            self.session.headers.update(headers)
+            # Use station-based search (simpler and more reliable)
+            station_encoded = quote(station_name)
             
-            # Build search URL with broader parameters
+            # Broader search parameters
             params = {
-                'ar': '030',
-                'bs': '040',
-                'ta': '13',
-                'sc': area_data['suumo_code'],
-                'cb': '20.0',  # Broader price range
-                'ct': '40.0',
-                'mb': '0',
-                'mt': '20',    # Broader walk time
-                'shkr1': '03',
-                'shkr2': '03',
-                'shkr3': '03',
-                'rn': '0005'
+                'ar': '030',  # Kanto region
+                'bs': '040',  # Building type
+                'ra': '013',  # Tokyo area
+                'rn': '0005', # Sort by newest
+                'ek': station_encoded,  # Station name
+                'cb': '20.0',  # Min rent (20万円)
+                'ct': '40.0',  # Max rent (40万円)
+                'mt': '20',    # Max walk 20 minutes
+                'md': '02',    # Include 2+ rooms
+                'md': '03',    # Include 3+ rooms
             }
             
-            url = f"https://suumo.jp/jj/chintai/ichiran/FR301FC001/?{urlencode(params)}"
-            logger.info(f"Searching Suumo for {area_name}...")
+            url = f"https://suumo.jp/jj/chintai/ichiran/FR301FC005/?{urlencode(params)}"
+            logger.info(f"Searching Suumo for properties near {station_name} station...")
             
-            # Random delay before request
-            self.random_delay(3, 6)
+            # Add random delay to be respectful
+            time.sleep(random.uniform(3, 6))
             
             response = self.session.get(url, timeout=30)
+            logger.info(f"Suumo response status for {station_name}: {response.status_code}")
             
             if response.status_code == 200:
-                properties = self.parse_suumo_response(response.content, area_name, area_data)
-                logger.info(f"✅ Suumo {area_name}: Found {len(properties)} properties")
-            elif response.status_code == 503:
-                logger.warning(f"⚠️ Suumo blocking detected for {area_name}, trying alternative approach...")
-                # Try with different parameters
-                properties = self.search_suumo_alternative(area_name, area_data)
+                properties = self.parse_suumo_simple(response.text, station_name, station_data)
+                logger.info(f"✅ Found {len(properties)} properties near {station_name}")
             else:
-                logger.error(f"❌ Suumo {area_name}: HTTP {response.status_code}")
+                logger.warning(f"⚠️ Suumo returned status {response.status_code} for {station_name}")
                 
         except Exception as e:
-            logger.error(f"❌ Suumo {area_name} error: {e}")
+            logger.error(f"❌ Error searching {station_name}: {e}")
         
         return properties
 
-    def search_suumo_alternative(self, area_name, area_data):
-        """Alternative Suumo search approach"""
-        try:
-            # Try station-based search instead of area code
-            station_query = quote(area_name)
-            url = f"https://suumo.jp/jj/chintai/ichiran/FR301FC005/?ar=030&bs=040&ra=013&rn=0005&ek={station_query}"
-            
-            self.random_delay(4, 7)
-            response = self.session.get(url, timeout=30)
-            
-            if response.status_code == 200:
-                properties = self.parse_suumo_response(response.content, area_name, area_data)
-                logger.info(f"✅ Suumo Alternative {area_name}: Found {len(properties)} properties")
-                return properties
-            
-        except Exception as e:
-            logger.error(f"❌ Suumo Alternative {area_name}: {e}")
-        
-        return []
-
-    def search_homes_co_jp(self, area_name, area_data):
-        """Search Homes.co.jp"""
-        properties = []
-        
-        try:
-            headers = self.get_random_headers()
-            self.session.headers.update(headers)
-            
-            # Homes.co.jp search URL
-            base_url = "https://www.homes.co.jp/chintai/search/"
-            params = {
-                'rent_from': int(self.min_rent/10000),  # Convert to 万円
-                'rent_to': int(self.max_rent/10000),
-                'walk_time': '15',
-                'layout': '3LDK,2LDK',
-                'keyword': area_name
-            }
-            
-            url = f"{base_url}?{urlencode(params)}"
-            logger.info(f"Searching Homes.co.jp for {area_name}...")
-            
-            self.random_delay(2, 4)
-            response = self.session.get(url, timeout=30)
-            
-            if response.status_code == 200:
-                properties = self.parse_homes_response(response.content, area_name, area_data)
-                logger.info(f"✅ Homes.co.jp {area_name}: Found {len(properties)} properties")
-            else:
-                logger.error(f"❌ Homes.co.jp {area_name}: HTTP {response.status_code}")
-                
-        except Exception as e:
-            logger.error(f"❌ Homes.co.jp {area_name} error: {e}")
-        
-        return properties
-
-    def search_athome_co_jp(self, area_name, area_data):
-        """Search AtHome.co.jp"""
-        properties = []
-        
-        try:
-            headers = self.get_random_headers()
-            self.session.headers.update(headers)
-            
-            # AtHome search URL
-            params = {
-                'prefecture': '13',  # Tokyo
-                'city': area_data.get('athome_code', area_name),
-                'rent_min': self.min_rent,
-                'rent_max': self.max_rent,
-                'layout': '3LDK,2LDK',
-                'walk_time': '15'
-            }
-            
-            url = f"https://www.athome.co.jp/chintai/search/?{urlencode(params)}"
-            logger.info(f"Searching AtHome for {area_name}...")
-            
-            self.random_delay(2, 4)
-            response = self.session.get(url, timeout=30)
-            
-            if response.status_code == 200:
-                properties = self.parse_athome_response(response.content, area_name, area_data)
-                logger.info(f"✅ AtHome {area_name}: Found {len(properties)} properties")
-            else:
-                logger.error(f"❌ AtHome {area_name}: HTTP {response.status_code}")
-                
-        except Exception as e:
-            logger.error(f"❌ AtHome {area_name} error: {e}")
-        
-        return properties
-
-    def parse_suumo_response(self, html_content, area_name, area_data):
-        """Parse Suumo HTML response"""
+    def parse_suumo_simple(self, html_content, station_name, station_data):
+        """Simple HTML parsing focused on getting any properties"""
         properties = []
         
         try:
             soup = BeautifulSoup(html_content, 'html.parser')
             
-            # Look for different possible selectors
-            property_items = (
+            # Look for any property containers (try multiple selectors)
+            property_containers = (
                 soup.find_all('div', class_='cassetteitem') or
-                soup.find_all('div', class_='property-unit') or
-                soup.find_all('div', {'data-bc': 'js-cassette-link'})
+                soup.find_all('div', {'data-bc': True}) or
+                soup.find_all('div', class_='property') or
+                soup.find_all('article') or
+                soup.find_all('div', class_='item')
             )
             
-            for item in property_items[:8]:  # Limit results
-                property_data = self.parse_suumo_item(item, area_name, area_data)
-                if property_data and self.min_rent <= property_data['price'] <= self.max_rent:
-                    properties.append(property_data)
-                    
+            logger.info(f"Found {len(property_containers)} potential property containers for {station_name}")
+            
+            for i, container in enumerate(property_containers[:10]):  # Process first 10
+                try:
+                    property_data = self.extract_property_data_simple(container, station_name, station_data)
+                    if property_data:
+                        properties.append(property_data)
+                        logger.info(f"Successfully parsed property {i+1}: {property_data['title'][:50]}...")
+                except Exception as e:
+                    logger.debug(f"Could not parse property container {i+1}: {e}")
+                    continue
+            
         except Exception as e:
-            logger.error(f"Error parsing Suumo response for {area_name}: {e}")
+            logger.error(f"Error parsing HTML for {station_name}: {e}")
         
         return properties
 
-    def parse_suumo_item(self, item, area_name, area_data):
-        """Parse individual Suumo property item"""
+    def extract_property_data_simple(self, container, station_name, station_data):
+        """Extract property data with simple fallbacks"""
         try:
-            # Extract title with multiple selectors
-            title_selectors = [
+            # Extract title (try multiple approaches)
+            title = self.find_text_by_selectors(container, [
                 'div.cassetteitem_content-title',
-                'h3.property-title',
-                '.js-cassette-link-text'
-            ]
+                'h2', 'h3', 'h4',
+                '[class*="title"]',
+                '[class*="name"]'
+            ]) or f"Property near {station_name}"
             
-            title = None
-            for selector in title_selectors:
-                title_elem = item.select_one(selector)
-                if title_elem:
-                    title = title_elem.get_text(strip=True)
-                    break
-            
-            if not title:
-                return None
-            
-            # Extract price with multiple approaches
-            price_selectors = [
+            # Extract price
+            price_text = self.find_text_by_selectors(container, [
                 'span.cassetteitem_price--rent',
-                '.property-price',
-                '[class*="rent"]'
-            ]
+                '[class*="rent"]',
+                '[class*="price"]',
+                'span[class*="yen"]'
+            ])
             
-            price = 0
-            for selector in price_selectors:
-                price_elem = item.select_one(selector)
-                if price_elem:
-                    price_text = price_elem.get_text(strip=True)
-                    price = self.extract_price(price_text)
-                    if price > 0:
-                        break
+            price = self.extract_price_simple(price_text) if price_text else 0
             
-            if price == 0:
+            # Skip if no valid price found
+            if price < 50000:  # Less than 5万円 is probably not valid
                 return None
             
-            # Extract other details
-            rooms = self.extract_rooms(item) or "Unknown"
-            location = self.extract_location(item, area_name)
-            walk_minutes = self.extract_walk_time(item)
-            property_url = self.extract_url(item, 'suumo')
+            # Extract rooms
+            rooms = self.find_text_by_selectors(container, [
+                'span.cassetteitem_madori',
+                '[class*="madori"]',
+                '[class*="layout"]',
+                '[class*="room"]'
+            ]) or "2-3LDK"
             
+            # Extract location
+            location = self.find_text_by_selectors(container, [
+                'li.cassetteitem_detail-col1',
+                '[class*="address"]',
+                '[class*="location"]'
+            ]) or station_name
+            
+            # Extract walk time
+            walk_text = container.get_text()
+            walk_minutes = self.extract_walk_time_simple(walk_text)
+            
+            # Extract URL
+            property_url = self.extract_url_simple(container)
+            
+            # Create property data
             property_data = {
-                'title': title,
+                'title': title.strip(),
                 'price': price,
-                'rooms': rooms,
-                'location': location,
-                'station': area_name,
+                'rooms': rooms.strip(),
+                'location': location.strip(),
+                'station': station_name,
                 'walk_minutes': walk_minutes,
                 'property_url': property_url,
-                'image_url': self.extract_image_url(item),
                 'found_date': datetime.now().isoformat(),
                 'source': 'Suumo',
-                'area_priority': area_data['priority'],
-                'route_type': area_data['route']
+                'area_priority': station_data['priority'],
+                'route_type': station_data['route']
             }
             
             # Calculate score
-            score, reasons = self.calculate_enhanced_score(property_data, area_data)
+            score, reasons = self.calculate_score_simple(property_data, station_data)
             property_data['score'] = score
             property_data['reasons'] = json.dumps(reasons)
             
             return property_data
             
         except Exception as e:
-            logger.error(f"Error parsing Suumo item: {e}")
+            logger.debug(f"Error extracting property data: {e}")
             return None
 
-    def parse_homes_response(self, html_content, area_name, area_data):
-        """Parse Homes.co.jp response"""
-        properties = []
-        
-        try:
-            soup = BeautifulSoup(html_content, 'html.parser')
-            
-            # Homes.co.jp specific selectors
-            property_items = soup.find_all('div', class_='prg-bukkenList')
-            
-            for item in property_items[:5]:
-                property_data = self.parse_homes_item(item, area_name, area_data)
-                if property_data and self.min_rent <= property_data['price'] <= self.max_rent:
-                    properties.append(property_data)
-                    
-        except Exception as e:
-            logger.error(f"Error parsing Homes response for {area_name}: {e}")
-        
-        return properties
+    def find_text_by_selectors(self, container, selectors):
+        """Try multiple CSS selectors to find text"""
+        for selector in selectors:
+            try:
+                element = container.select_one(selector)
+                if element and element.get_text(strip=True):
+                    return element.get_text(strip=True)
+            except:
+                continue
+        return None
 
-    def parse_homes_item(self, item, area_name, area_data):
-        """Parse individual Homes.co.jp property"""
-        try:
-            # Simplified parsing for Homes.co.jp
-            title_elem = item.find('h2') or item.find('h3')
-            title = title_elem.get_text(strip=True) if title_elem else f"{area_name} Property"
-            
-            # Try to extract price (simplified)
-            price_text = item.get_text()
-            price = self.extract_price(price_text)
-            
-            if price == 0:
-                return None
-            
-            property_data = {
-                'title': title,
-                'price': price,
-                'rooms': "2-3LDK",  # Default assumption
-                'location': area_name,
-                'station': area_name,
-                'walk_minutes': 10,  # Default assumption
-                'property_url': "https://www.homes.co.jp/",
-                'image_url': "",
-                'found_date': datetime.now().isoformat(),
-                'source': 'Homes.co.jp',
-                'area_priority': area_data['priority'],
-                'route_type': area_data['route']
-            }
-            
-            score, reasons = self.calculate_enhanced_score(property_data, area_data)
-            property_data['score'] = score
-            property_data['reasons'] = json.dumps(reasons)
-            
-            return property_data
-            
-        except Exception as e:
-            logger.error(f"Error parsing Homes item: {e}")
-            return None
-
-    def parse_athome_response(self, html_content, area_name, area_data):
-        """Parse AtHome response - similar structure to Homes"""
-        # Implementation similar to parse_homes_response
-        return []
-
-    def extract_price(self, price_text):
-        """Enhanced price extraction"""
+    def extract_price_simple(self, price_text):
+        """Simple price extraction"""
         if not price_text:
             return 0
         
-        # Remove common Japanese characters
-        clean_text = re.sub(r'[万円,、\s]', '', price_text)
+        # Clean up text
+        clean_text = re.sub(r'[万円,\s]', '', price_text)
         
-        # Look for patterns like "28万" or "280000"
+        # Look for number patterns
         patterns = [
             r'(\d+\.?\d*)万',  # X万円 format
-            r'(\d{6,})',       # Direct yen amount
+            r'(\d{6,})',       # Direct yen amount 
             r'(\d+\.?\d*)',    # Any number
         ]
         
@@ -482,8 +250,7 @@ class ImprovedDStyPropertyCrawler:
             if matches:
                 try:
                     amount = float(matches[0])
-                    # If less than 100, assume it's in 万円
-                    if amount < 100:
+                    if amount < 100:  # Assume it's in 万円
                         return int(amount * 10000)
                     else:
                         return int(amount)
@@ -492,47 +259,8 @@ class ImprovedDStyPropertyCrawler:
         
         return 0
 
-    def extract_rooms(self, item):
-        """Extract room layout"""
-        room_selectors = [
-            'span.cassetteitem_madori',
-            '.madori',
-            '[class*="layout"]'
-        ]
-        
-        for selector in room_selectors:
-            elem = item.select_one(selector)
-            if elem:
-                return elem.get_text(strip=True)
-        
-        # Fallback: search in all text
-        text = item.get_text()
-        room_patterns = [r'(\d+LDK)', r'(\d+DK)', r'(\d+K)']
-        for pattern in room_patterns:
-            match = re.search(pattern, text)
-            if match:
-                return match.group(1)
-        
-        return "Unknown"
-
-    def extract_location(self, item, default_area):
-        """Extract location details"""
-        location_selectors = [
-            'li.cassetteitem_detail-col1',
-            '.address',
-            '[class*="location"]'
-        ]
-        
-        for selector in location_selectors:
-            elem = item.select_one(selector)
-            if elem:
-                return elem.get_text(strip=True)
-        
-        return default_area
-
-    def extract_walk_time(self, item):
-        """Extract walk time to station"""
-        text = item.get_text()
+    def extract_walk_time_simple(self, text):
+        """Extract walk time from text"""
         walk_patterns = [r'徒歩(\d+)分', r'(\d+)分']
         
         for pattern in walk_patterns:
@@ -542,91 +270,86 @@ class ImprovedDStyPropertyCrawler:
         
         return 10  # Default assumption
 
-    def extract_url(self, item, source):
+    def extract_url_simple(self, container):
         """Extract property URL"""
-        link_elem = item.find('a')
-        if link_elem and link_elem.get('href'):
-            href = link_elem['href']
-            if source == 'suumo' and not href.startswith('http'):
+        link = container.find('a')
+        if link and link.get('href'):
+            href = link['href']
+            if href.startswith('/'):
                 return f"https://suumo.jp{href}"
-            return href
-        
-        return ""
+            elif href.startswith('http'):
+                return href
+        return "https://suumo.jp/"
 
-    def extract_image_url(self, item):
-        """Extract property image URL"""
-        img_elem = item.find('img')
-        if img_elem and img_elem.get('src'):
-            return img_elem['src']
-        return ""
-
-    def calculate_enhanced_score(self, property_data, area_data):
-        """Enhanced scoring algorithm"""
+    def calculate_score_simple(self, property_data, station_data):
+        """Simple scoring algorithm"""
         score = 0
         reasons = []
         
-        # Price scoring (30 points)
+        # Price scoring (flexible)
         price = property_data['price']
-        if 280000 <= price <= 320000:
+        if 250000 <= price <= 350000:
             score += 30
-            reasons.append("Perfect price range (¥280k-320k)")
-        elif 250000 <= price <= 350000:
+            reasons.append("Perfect DSTY budget range")
+        elif 200000 <= price <= 400000:
             score += 25
             reasons.append("Good price range")
-        elif price < 250000:
+        elif price < 200000:
             score += 20
-            reasons.append("Great value - under budget")
+            reasons.append("Great value - very affordable")
         else:
-            score -= 5
-            reasons.append("Over budget")
+            score += 10
+            reasons.append("Higher price range")
         
-        # Room scoring (25 points)
+        # Room scoring
         rooms = property_data['rooms']
-        if '3LDK' in rooms:
+        if '3LDK' in rooms or '3LD' in rooms:
             score += 25
-            reasons.append("Perfect family layout (3LDK)")
-        elif '2LDK' in rooms:
+            reasons.append("Perfect family size (3LDK)")
+        elif '2LDK' in rooms or '2LD' in rooms:
             score += 20
-            reasons.append("Good layout (2LDK)")
+            reasons.append("Good family size (2LDK)")
         elif '3' in rooms:
             score += 22
             reasons.append("3-room layout")
+        elif '2' in rooms:
+            score += 18
+            reasons.append("2-room layout")
         
-        # Area priority (25 points)
-        score += area_data['priority']
-        route = area_data['route']
+        # Area/Route scoring
+        priority = station_data['priority']
+        score += priority
+        route = station_data['route']
+        
         if route == 'Pink':
-            reasons.append("Premium Pink Route - excellent bus access")
+            reasons.append("Premium Pink Route - excellent DSTY bus access")
         elif route == 'Yellow':
             reasons.append("Excellent Yellow Route - great for families")
         elif route == 'Green':
-            reasons.append("Good Green Route - spacious area")
+            reasons.append("Good Green Route - nice residential area")
         
-        # Walk time scoring (15 points)
+        # Walk time scoring
         walk = property_data['walk_minutes']
-        if walk <= 5:
+        if walk <= 10:
             score += 15
-            reasons.append("Very close to station (≤5 min)")
-        elif walk <= 10:
-            score += 12
-            reasons.append("Close to station (≤10 min)")
+            reasons.append(f"Close to station ({walk} min walk)")
         elif walk <= 15:
-            score += 8
-            reasons.append("Acceptable walk (≤15 min)")
-        
-        # Source bonus (5 points)
-        source = property_data['source']
-        if source == 'Suumo':
+            score += 10
+            reasons.append(f"Reasonable walk to station ({walk} min)")
+        elif walk <= 20:
             score += 5
-            reasons.append("High-quality Suumo listing")
-        elif source in ['Homes.co.jp', 'AtHome']:
-            score += 3
-            reasons.append(f"Verified {source} listing")
+            reasons.append(f"Acceptable walk to station ({walk} min)")
+        
+        # Bonus for good areas
+        location = property_data['location'].lower()
+        if any(keyword in location for keyword in ['田園調布', '目黒', '恵比寿']):
+            score += 5
+            reasons.append("Premium residential area")
         
         return min(100, max(0, score)), reasons
 
-    def save_properties_enhanced(self, properties):
-        """Enhanced property saving with deduplication"""
+    def save_properties_simple(self, properties):
+        """Save properties to database"""
         if not properties:
             return 0
         
@@ -634,41 +357,21 @@ class ImprovedDStyPropertyCrawler:
         cursor = conn.cursor()
         
         new_count = 0
-        updated_count = 0
-        
         for prop in properties:
             try:
-                # Check if property exists (by URL or similar title + price)
                 cursor.execute('''
-                SELECT id FROM properties 
-                WHERE property_url = ? OR (title = ? AND price = ?)
-                ''', (prop['property_url'], prop['title'], prop['price']))
+                INSERT OR IGNORE INTO properties 
+                (title, price, rooms, location, station, walk_minutes, property_url,
+                 found_date, source, score, area_priority, route_type, reasons)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    prop['title'], prop['price'], prop['rooms'], prop['location'],
+                    prop['station'], prop['walk_minutes'], prop['property_url'],
+                    prop['found_date'], prop['source'], prop['score'],
+                    prop['area_priority'], prop['route_type'], prop['reasons']
+                ))
                 
-                existing = cursor.fetchone()
-                
-                if existing:
-                    # Update existing property
-                    cursor.execute('''
-                    UPDATE properties SET 
-                    last_seen = ?, score = ?, reasons = ?, is_active = 1
-                    WHERE id = ?
-                    ''', (datetime.now().isoformat(), prop['score'], prop['reasons'], existing[0]))
-                    updated_count += 1
-                else:
-                    # Insert new property
-                    cursor.execute('''
-                    INSERT INTO properties 
-                    (title, price, rooms, location, station, walk_minutes, property_url,
-                     image_url, found_date, source, score, area_priority, route_type, 
-                     reasons, last_seen)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ''', (
-                        prop['title'], prop['price'], prop['rooms'], prop['location'],
-                        prop['station'], prop['walk_minutes'], prop['property_url'],
-                        prop['image_url'], prop['found_date'], prop['source'],
-                        prop['score'], prop['area_priority'], prop['route_type'],
-                        prop['reasons'], datetime.now().isoformat()
-                    ))
+                if cursor.rowcount > 0:
                     new_count += 1
                     
             except sqlite3.Error as e:
@@ -677,78 +380,33 @@ class ImprovedDStyPropertyCrawler:
         conn.commit()
         conn.close()
         
-        logger.info(f"Saved {new_count} new, updated {updated_count} existing properties")
+        logger.info(f"Saved {new_count} new properties out of {len(properties)} found")
         return new_count
 
-    def run_multi_site_search(self):
-        """Run comprehensive multi-site search"""
-        logger.info("🏠 Starting enhanced multi-site DSTY property search...")
+    def run_simple_search(self):
+        """Run simple Suumo-only search"""
+        logger.info("🏠 Starting simple DSTY property search (Suumo only)...")
         
         total_found = 0
         total_new = 0
         
-        for area_name, area_data in self.target_areas.items():
-            logger.info(f"🔍 Searching {area_name} ({area_data['route']} Route) across all sites...")
+        for station_name, station_data in self.target_stations.items():
+            logger.info(f"🔍 Searching near {station_name} station ({station_data['route']} Route)...")
             
-            area_properties = []
+            properties = self.search_suumo_station(station_name, station_data)
             
-            # Search Suumo (improved)
-            try:
-                suumo_props = self.search_suumo_improved(area_name, area_data)
-                area_properties.extend(suumo_props)
-                self.log_search_result(area_name, 'Suumo', len(suumo_props), 'success')
-            except Exception as e:
-                logger.error(f"Suumo search failed for {area_name}: {e}")
-                self.log_search_result(area_name, 'Suumo', 0, 'error', str(e))
-            
-            # Search Homes.co.jp
-            try:
-                homes_props = self.search_homes_co_jp(area_name, area_data)
-                area_properties.extend(homes_props)
-                self.log_search_result(area_name, 'Homes.co.jp', len(homes_props), 'success')
-            except Exception as e:
-                logger.error(f"Homes.co.jp search failed for {area_name}: {e}")
-                self.log_search_result(area_name, 'Homes.co.jp', 0, 'error', str(e))
-            
-            # Search AtHome
-            try:
-                athome_props = self.search_athome_co_jp(area_name, area_data)
-                area_properties.extend(athome_props)
-                self.log_search_result(area_name, 'AtHome', len(athome_props), 'success')
-            except Exception as e:
-                logger.error(f"AtHome search failed for {area_name}: {e}")
-                self.log_search_result(area_name, 'AtHome', 0, 'error', str(e))
-            
-            # Save properties for this area
-            if area_properties:
-                new_count = self.save_properties_enhanced(area_properties)
-                total_found += len(area_properties)
+            if properties:
+                new_count = self.save_properties_simple(properties)
+                total_found += len(properties)
                 total_new += new_count
-                logger.info(f"✅ {area_name}: {len(area_properties)} total found, {new_count} new")
+                logger.info(f"✅ {station_name}: Found {len(properties)}, saved {new_count} new")
             else:
-                logger.info(f"❌ {area_name}: No properties found across all sites")
-            
-            # Longer delay between areas to be respectful
-            self.random_delay(8, 12)
+                logger.info(f"❌ {station_name}: No properties found")
         
-        logger.info(f"🎉 Multi-site search complete! Total: {total_found} found, {total_new} new")
+        logger.info(f"🎉 Simple search complete! Total: {total_found} found, {total_new} new")
         return total_found, total_new
 
-    def log_search_result(self, area, source, count, status, error_msg=""):
-        """Log search results to database"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-        INSERT INTO search_results 
-        (search_date, source, area, properties_found, new_properties, status, error_message)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (datetime.now().isoformat(), source, area, count, 0, status, error_msg))
-        
-        conn.commit()
-        conn.close()
-
-    # Keep existing methods for compatibility
+    # Compatibility methods
     def get_top_properties(self, limit=20):
         """Get top-ranked properties"""
         conn = sqlite3.connect(self.db_path)
@@ -776,42 +434,22 @@ class ImprovedDStyPropertyCrawler:
         return properties
 
     def get_stats(self):
-        """Get enhanced search statistics"""
+        """Get search statistics"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
-        # Total active properties
         cursor.execute('SELECT COUNT(*) FROM properties WHERE is_active = 1')
         total = cursor.fetchone()[0]
         
-        # Properties in budget
-        cursor.execute('''
-        SELECT COUNT(*) FROM properties 
-        WHERE is_active = 1 AND price BETWEEN ? AND ?
-        ''', (self.min_rent, self.max_rent))
+        cursor.execute('SELECT COUNT(*) FROM properties WHERE is_active = 1 AND price BETWEEN ? AND ?', 
+                      (250000, 350000))
         in_budget = cursor.fetchone()[0]
         
-        # Average score
         cursor.execute('SELECT AVG(score) FROM properties WHERE is_active = 1')
         avg_score = cursor.fetchone()[0] or 0
         
-        # Max score
         cursor.execute('SELECT MAX(score) FROM properties WHERE is_active = 1')
         max_score = cursor.fetchone()[0] or 0
-        
-        # Properties by source
-        cursor.execute('''
-        SELECT source, COUNT(*) FROM properties 
-        WHERE is_active = 1 GROUP BY source
-        ''')
-        by_source = dict(cursor.fetchall())
-        
-        # Properties by route
-        cursor.execute('''
-        SELECT route_type, COUNT(*) FROM properties 
-        WHERE is_active = 1 GROUP BY route_type
-        ''')
-        by_route = dict(cursor.fetchall())
         
         conn.close()
         
@@ -819,17 +457,13 @@ class ImprovedDStyPropertyCrawler:
             'total_properties': total,
             'in_budget': in_budget,
             'avg_score': round(avg_score, 1),
-            'max_score': round(max_score, 1),
-            'by_source': by_source,
-            'by_route': by_route
+            'max_score': round(max_score, 1)
         }
 
-    # Alias for backward compatibility
+    # Alias for app.py compatibility
     def run_full_search(self):
-        """Backward compatibility method"""
-        return self.run_multi_site_search()
+        return self.run_simple_search()
 
-# Test run
 if __name__ == "__main__":
-    crawler = ImprovedDStyPropertyCrawler()
-    crawler.run_multi_site_search()
+    crawler = SimpleDStyPropertyCrawler()
+    crawler.run_simple_search()
