@@ -1,6 +1,6 @@
 # app.py - Web interface for Railway
 from flask import Flask, render_template_string, jsonify
-from improved_crawler import EnhancedDStyBusProximityFinder as DStyPropertyCrawle
+from improved_crawler import EnhancedDStyBusProximityFinder as DStyPropertyCrawler
 import threading
 import time
 import schedule
