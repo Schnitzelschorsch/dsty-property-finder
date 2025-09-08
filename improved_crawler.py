@@ -694,10 +694,45 @@ class EnhancedDStyBusProximityFinder:
             'with_parking': with_parking
         }
 
-# Alias for compatibility
-def run_full_search(self):
-    return self.run_enhanced_family_search()
-    
+ def get_stats(self):
+        """Get enhanced statistics with bus stop proximity"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT COUNT(*) FROM properties WHERE is_active = 1')
+        total = cursor.fetchone()[0]
+        
+        cursor.execute('SELECT COUNT(*) FROM properties WHERE is_active = 1 AND price BETWEEN ? AND ?', 
+                      (self.family_criteria['budget_min'], self.family_criteria['budget_max']))
+        in_budget = cursor.fetchone()[0]
+        
+        cursor.execute('SELECT AVG(score) FROM properties WHERE is_active = 1')
+        avg_score = cursor.fetchone()[0] or 0
+        
+        cursor.execute('SELECT MAX(score) FROM properties WHERE is_active = 1')
+        max_score = cursor.fetchone()[0] or 0
+        
+        cursor.execute('SELECT COUNT(*) FROM properties WHERE is_active = 1 AND walk_to_school <= 15')
+        walkable_to_school = cursor.fetchone()[0]
+        
+        cursor.execute('SELECT COUNT(*) FROM properties WHERE is_active = 1 AND parking_available = 1')
+        with_parking = cursor.fetchone()[0]
+        
+        conn.close()
+        
+        return {
+            'total_properties': total,
+            'in_budget': in_budget,
+            'avg_score': round(avg_score, 1),
+            'max_score': round(max_score, 1),
+            'walkable_to_school': walkable_to_school,
+            'with_parking': with_parking
+        }
+
+    # Alias for compatibility
+    def run_full_search(self):
+        return self.run_enhanced_family_search()
+
 if __name__ == "__main__":
     finder = EnhancedDStyBusProximityFinder()
     finder.run_enhanced_family_search()
