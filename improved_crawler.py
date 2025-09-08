@@ -694,6 +694,10 @@ class EnhancedDStyBusProximityFinder:
             'with_parking': with_parking
         }
 
+# Alias for compatibility
+def run_full_search(self):
+    return self.run_enhanced_family_search()
+    
 if __name__ == "__main__":
     finder = EnhancedDStyBusProximityFinder()
     finder.run_enhanced_family_search()
